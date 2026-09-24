@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LCAA 公告分析查询 · 小调AI</title>
+<style>
+  :root{
+    --deep:#3B6D11; --mid:#639922; --light:#97C45B; --cream:#F5F8EF;
+    --ink:#2c3e2d; --gray:#8a938a; --line:#e3ece0;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--cream);color:var(--ink);line-height:1.7}
+  .topbar{background:var(--deep);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:10px}
+  .logo{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 35% 30%,var(--light),var(--mid));display:inline-block}
+  .topbar b{font-size:17px;font-weight:700}
+  .topbar span{font-size:12px;opacity:.85;margin-left:auto}
+  .wrap{max-width:760px;margin:0 auto;padding:22px 18px 60px}
+  /* 门禁 */
+  #gate{position:fixed;inset:0;background:rgba(59,109,17,.96);display:flex;align-items:center;justify-content:center;z-index:50}
+  .gate-box{background:#fff;border-radius:16px;padding:34px 30px;width:320px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+  .gate-box h2{color:var(--deep);font-size:19px;margin-bottom:6px}
+  .gate-box p{font-size:12.5px;color:var(--gray);margin-bottom:18px}
+  .gate-box input{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:9px;font-size:15px;outline:none}
+  .gate-box input:focus{border-color:var(--mid)}
+  .gate-box button{width:100%;margin-top:14px;padding:11px;border:0;border-radius:9px;background:var(--deep);color:#fff;font-size:15px;cursor:pointer}
+  .gate-err{color:#c0392b;font-size:12px;height:16px;margin-top:8px}
+  /* 搜索 */
+  .search{position:relative;margin:6px 0 18px}
+  .search input{width:100%;padding:14px 16px 14px 44px;border:2px solid var(--line);border-radius:14px;font-size:16px;background:#fff;outline:none}
+  .search input:focus{border-color:var(--mid)}
+  .search::before{content:"🔍";position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:17px;opacity:.5}
+  .hint{font-size:12.5px;color:var(--gray);margin-bottom:14px}
+  .stat{font-size:12.5px;color:var(--mid);margin-bottom:10px}
+  /* 结果 */
+  .card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:15px 17px;margin-bottom:11px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:.15s}
+  .card:hover{border-color:var(--mid);box-shadow:0 3px 12px rgba(59,109,17,.1);transform:translateY(-1px)}
+  .badge{flex:0 0 auto;width:62px;height:62px;border-radius:11px;background:var(--cream);display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--deep);border:1px solid var(--line)}
+  .badge b{font-size:16px;line-height:1.1}
+  .badge small{font-size:10px;color:var(--gray)}
+  .meta{flex:1;min-width:0}
+  .meta .nm{font-size:16px;font-weight:600;color:var(--ink)}
+  .meta .sub{font-size:12.5px;color:var(--gray);margin-top:3px}
+  .ver{display:inline-block;font-size:11px;color:#fff;background:var(--mid);border-radius:5px;padding:1px 7px;margin-left:6px}
+  .arrow{color:var(--light);font-size:22px;flex:0 0 auto}
+  .empty{text-align:center;color:var(--gray);padding:40px 0;font-size:14px}
+  .disclaimer{margin-top:26px;padding:14px 16px;background:#fff8e6;border:1px solid #f0ddb0;border-radius:11px;font-size:12px;color:#8a6d1f;line-height:1.7}
+  .disclaimer b{color:#7a5c10}
+  mark{background:#fff3a8;color:inherit;padding:0 1px;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="gate">
+  <div class="gate-box">
+    <div class="logo" style="margin:0 auto 12px"></div>
+    <h2>LCAA 公告分析查询</h2>
+    <p>请输入访问口令后进入</p>
+    <input id="pwd" type="password" placeholder="访问口令" autocomplete="off">
+    <div class="gate-err" id="gerr"></div>
+    <button onclick="unlock()">进入</button>
+  </div>
+</div>
+
+<div class="topbar">
+  <span class="logo"></span>
+  <b>LCAA 公告分析查询</b>
+  <span>Listed Company Announcement Analysis · 小调AI</span>
+</div>
+
+<div class="wrap" id="app" style="display:none">
+  <div class="search">
+    <input id="q" type="text" placeholder="输入股票代码 / 名称 / 拼音，如 600543、莫高、mogao" autocomplete="off">
+  </div>
+  <div class="hint">支持代码、中文名、全拼（mogao）、首字母（mg）模糊匹配</div>
+  <div class="stat" id="stat"></div>
+  <div id="list"></div>
+  <div class="disclaimer">
+    <b>免责声明：</b>本页内容为基于公开信息的自动化整理，仅用于研究与信息参考，<b>不构成任何投资建议，不提供证券投资建议服务</b>。
+    报告中数据截至生成日，可能已发生变化，请以最新公告为准。投资有风险，决策需谨慎。
+  </div>
+</div>
+
+<script>
+// 共享口令：SHA-256 校验（client-side，仅作访问门槛，非安全认证）
+// 修改口令：把新口令的 SHA-256 填到 TOKEN_HASH，并同步告知对方。
+const TOKEN_HASH = "78e5951ec960ea84418cdac81f6875d5ea06c9b06de5483af968903199b0c385";
+
+function sha256(s){return crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)).then(d=>[...new Uint8Array(d)].map(x=>x.toString(16).padStart(2,"0")).join(""));}
+
+async function unlock(){
+  const v=document.getElementById("pwd").value.trim();
+  const err=document.getElementById("gerr");
+  if(!v){err.textContent="请输入口令";return;}
+  const h=await sha256(v);
+  if(h===TOKEN_HASH){
+    sessionStorage.setItem("lcaa_ok","1");
+    document.getElementById("gate").style.display="none";
+    document.getElementById("app").style.display="block";
+    document.getElementById("q").focus();
+  }else{err.textContent="口令错误，请重试";}
+}
+
+document.getElementById("pwd").addEventListener("keydown",e=>{if(e.key==="Enter")unlock();});
+if(sessionStorage.getItem("lcaa_ok")==="1"){document.getElementById("gate").style.display="none";document.getElementById("app").style.display="block";}
+
+let DATA=[];
+fetch("index.json").then(r=>r.json()).then(d=>{DATA=d;render("");}).catch(e=>{
+  document.getElementById("list").innerHTML='<div class="empty">索引加载失败：'+e+'</div>';
+});
+
+function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function hl(t,k){if(!k)return esc(t);const i=t.toLowerCase().indexOf(k.toLowerCase());if(i<0)return esc(t);return esc(t.slice(0,i))+"<mark>"+esc(t.slice(i,i+k.length))+"</mark>"+esc(t.slice(i+k.length));}
+
+function render(q){
+  q=(q||"").trim().toLowerCase();
+  const box=document.getElementById("list");
+  const stat=document.getElementById("stat");
+  if(!DATA.length){box.innerHTML='<div class="empty">暂无报告数据</div>';return;}
+  let hits=DATA;
+  if(q){
+    hits=DATA.filter(e=>{
+      const f=[e.code,e.name,e.pinyin,e.pinyin_sp.replace(/ /g,""),e.initials].join("").toLowerCase();
+      return f.includes(q);
+    });
+  }
+  stat.textContent=q?("匹配 "+hits.length+" / 共 "+DATA.length+" 篇"):("共 "+DATA.length+" 篇分析报告");
+  if(!hits.length){box.innerHTML='<div class="empty">没有匹配「'+esc(q)+"」的报告</div>';return;}
+  box.innerHTML=hits.map(e=>{
+    return '<div class="card" onclick="openReport(\''+e.url+'\')">'
+      +'<div class="badge"><b>'+e.code.slice(0,2)+'</b><small>'+e.code.slice(2)+'</small></div>'
+      +'<div class="meta"><div class="nm">'+hl(e.name,q)+(e.ver?('<span class="ver">V'+e.ver+'</span>'):'')+'</div>'
+      +'<div class="sub">'+e.code+' · 生成于 '+e.date+'</div></div>'
+      +'<div class="arrow">›</div></div>';
+  }).join("");
+}
+function openReport(u){window.open(u,"_blank");}
+
+document.getElementById("q").addEventListener("input",e=>render(e.target.value));
+</script>
+</body>
+</html>
